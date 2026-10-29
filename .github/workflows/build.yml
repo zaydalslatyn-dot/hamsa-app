@@ -1,0 +1,43 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Prepare web
+        run: |
+          mkdir -p www/vendor assets
+          cp "$(ls birthday-app*.html | head -1)" www/index.html
+          cp icon-only.png assets/icon-only.png
+      - name: Install
+        run: |
+          npm init -y
+          npm i @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/local-notifications@7 @capacitor/assets firebase@10.14.1
+          cp node_modules/firebase/firebase-app-compat.js node_modules/firebase/firebase-auth-compat.js node_modules/firebase/firebase-firestore-compat.js www/vendor/ || true
+      - name: Android project
+        run: |
+          npx cap init "همسة" com.hamsa.app --web-dir=www
+          npx cap add android
+          npx capacitor-assets generate --android --iconBackgroundColor '#1d3560'
+          sed -i 's|<application|<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\n    <application|' android/app/src/main/AndroidManifest.xml
+          npx cap sync android
+      - name: Build
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hamsa-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
